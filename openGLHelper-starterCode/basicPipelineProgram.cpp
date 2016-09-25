@@ -30,8 +30,12 @@ void BasicPipelineProgram::SetProjectionMatrix(const GLfloat * m)
 
 void BasicPipelineProgram::SetFColor(const GLfloat * color) 
 {
-  // pass "m" to the pipeline program, as the projection matrix
   glUniform4fv(h_fCol, 1, color);
+}
+
+void BasicPipelineProgram::SetTextureSampler() 
+{
+  glUniform1i(h_textureSampler, 0);
 }
 
 int BasicPipelineProgram::SetShaderVariableHandles() 
@@ -41,6 +45,7 @@ int BasicPipelineProgram::SetShaderVariableHandles()
   SET_SHADER_VARIABLE_HANDLE(projectionMatrix);
   
   SET_SHADER_VARIABLE_HANDLE(fCol);
+//  SET_SHADER_VARIABLE_HANDLE(textureSampler);
   return 0;
 }
 

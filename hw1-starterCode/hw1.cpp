@@ -15,6 +15,7 @@
 #include "imageIO.h"
 #include "openGLMatrix.h"
 #include "basicPipelineProgram.h"
+#include "texture.h"
 
 #ifdef WIN32
 #ifdef _DEBUG
@@ -73,6 +74,8 @@ GLuint numTrianglesPerY = 0;
 const GLfloat fillColor[4] = {1.0, 1.0, 1.0, 0.0};
 const GLfloat frameColor[4] = {1.0, 0.0, 0.0, 0.0};
 
+GLuint textureImage;
+
 // write a screenshot to the specified filename
 void saveScreenshot(const char * filename) {
   unsigned char * screenshotData = new unsigned char[windowWidth * windowHeight * 3];
@@ -125,16 +128,16 @@ void displayFunc() {
       glDrawArrays(GL_POINTS, 0, numVertices);
       break;
     case WIRE_FRAME:
-      for (size_t y = 0; y < imageHeight - 1; y++) {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-        pipeline.SetFColor(frameColor);
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+      pipeline.SetFColor(frameColor);
+      for (size_t y = 0; y < imageHeight - 1; y++) { 
         glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
       }
       break;
     case FILL:
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+      pipeline.SetFColor(fillColor);
       for (size_t y = 0; y < imageHeight - 1; y++) {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        pipeline.SetFColor(fillColor);
         glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
       }
       break;
@@ -167,6 +170,7 @@ void idleFunc() {
   // do some stuff... 
 
   // for example, here, you can save the screenshots to disk (to make the animation)
+//  saveScreenshot("screenshot.jpg");
 
   // make the screen update 
   glutPostRedisplay();
@@ -340,6 +344,7 @@ void initScene(int argc, char *argv[]) {
 
   std::vector<GLfloat> vertices(3 * numVertices);
   std::vector<GLfloat> colors(4 * numVertices);
+  std::vector<GLfloat> uvData;
 
   for (size_t y = 0; y < imageHeight; y++) {
     for (size_t x = 0; x < imageWidth; x++) {
@@ -357,6 +362,24 @@ void initScene(int argc, char *argv[]) {
       vertices[(y * imageWidth + x) * 3 + 1] = -1.0f + (y / static_cast<GLfloat> (imageHeight)) * 2.0f;
       vertices[(y * imageWidth + x) * 3 + 2] = grayValue / 255.0f / 2.0;
 
+      if (y % 2 == 0) {
+        if (x % 2 == 0) {
+          uvData.push_back(0.0);
+          uvData.push_back(0.0);
+        } else {
+          uvData.push_back(1.0);
+          uvData.push_back(0.0);
+        }
+      } else {
+        if (x % 2 == 0) {
+          uvData.push_back(0.0);
+          uvData.push_back(1.0);
+        } else {
+          uvData.push_back(1.0);
+          uvData.push_back(1.0);
+        }
+      }
+
       colors[(y * imageWidth + x) * 4 + 0] = 1.0f * grayValue / 255.0f;
       colors[(y * imageWidth + x) * 4 + 1] = 1.0f * grayValue / 255.0f;
       colors[(y * imageWidth + x) * 4 + 2] = 1.0f * grayValue / 255.0f;
@@ -373,11 +396,10 @@ void initScene(int argc, char *argv[]) {
       triangleIndices.push_back(baseIndex);
       triangleIndices.push_back(baseIndex + 1);
       triangleIndices.push_back(baseIndex + imageWidth);
-
+      
       triangleIndices.push_back(baseIndex + imageWidth);
       triangleIndices.push_back(baseIndex + 1);
-      triangleIndices.push_back(baseIndex + 1 + imageWidth);
-
+      triangleIndices.push_back(baseIndex + 1 + imageWidth);      
     }
   }
   std::cout << "triangleIndices.size() " << triangleIndices.size() << std::endl;
@@ -385,6 +407,8 @@ void initScene(int argc, char *argv[]) {
   // Create shaders
   pipeline.Init(shaderBasePath);
   pipeline.Bind();
+  
+  textureImage = loadBMP_custom("./grass.bmp");
 
   // vao
   glGenVertexArrays(1, &vao);
@@ -411,6 +435,20 @@ void initScene(int argc, char *argv[]) {
   glGenBuffers(1, &elementbuffer);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, triangleIndices.size() * sizeof (unsigned int), &triangleIndices[0], GL_STATIC_DRAW);
+
+  // Bind our texture in Texture Unit 0
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, textureImage);
+  pipeline.SetTextureSampler();
+  
+  // uv vbo, for texture
+  GLuint uvbuffer;
+  glGenBuffers(1, &uvbuffer);
+  glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
+  glBufferData(GL_ARRAY_BUFFER, uvData.size() * sizeof (GLfloat), &uvData[0], GL_STATIC_DRAW);
+  GLuint uvLocation = glGetAttribLocation(pipeline.GetProgramHandle(), "vertexUV");
+  glVertexAttribPointer(uvLocation, 2, GL_FLOAT, GL_FALSE, 0, 0);
+  glEnableVertexAttribArray(uvLocation);
 
   glEnable(GL_DEPTH_TEST);
   glClearColor(131.0 / 255.0, 175 / 255.0, 155.0 / 255.0, 0.0);
