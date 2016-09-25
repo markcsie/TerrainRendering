@@ -47,9 +47,11 @@ typedef enum {
 RENDER_MODE renderMode = POINTS;
 
 // state of the world
-std::array<float, 3> landRotate = {0.0f, 0.0f, 0.0f};
-std::array<float, 3> landTranslate = {0.0f, 0.0f, 0.0f};
-std::array<float, 3> landScale = {1.0f, 1.0f, 1.0f};
+std::array<GLfloat, 3> landRotate = {0.0f, 0.0f, 0.0f};
+std::array<GLfloat, 3> landTranslate = {0.0f, 0.0f, 0.0f};
+std::array<GLfloat, 3> landScale = {1.0f, 1.0f, 1.0f};
+
+const std::array<GLfloat, 3> rgbCoefficients = {0.299f, 0.587f, 0.114f};
 
 int windowWidth = 1280;
 int windowHeight = 720;
@@ -68,13 +70,18 @@ GLuint colorBufferName;
 GLuint numVertices = 0;
 GLuint numTriangles = 0;
 GLuint numTrianglesPerY = 0;
-// write a screenshot to the specified filename
+const GLfloat fillColor[4] = {1.0, 1.0, 1.0, 0.0};
+const GLfloat frameColor[4] = {1.0, 0.0, 0.0, 0.0};
 
+// write a screenshot to the specified filename
 void saveScreenshot(const char * filename) {
   unsigned char * screenshotData = new unsigned char[windowWidth * windowHeight * 3];
+  std::cout << "wtfffff " << std::endl;
   glReadPixels(0, 0, windowWidth, windowHeight, GL_RGB, GL_UNSIGNED_BYTE, screenshotData);
+  std::cout << "wtfffff " << std::endl;
 
   ImageIO screenshotImg(windowWidth, windowHeight, 3, screenshotData);
+  std::cout << "wtfffff " << std::endl;
 
   if (screenshotImg.save(filename, ImageIO::FORMAT_JPEG) == ImageIO::OK) {
     std::cout << "File " << filename << " saved successfully." << std::endl;
@@ -87,13 +94,13 @@ void saveScreenshot(const char * filename) {
 
 void displayFunc() {
   // Projection
-  float projectionMatrix[16];
+  GLfloat projectionMatrix[16];
   openGLMatrix.SetMatrixMode(OpenGLMatrix::Projection);
   openGLMatrix.GetMatrix(projectionMatrix);
   pipeline.SetProjectionMatrix(projectionMatrix);
 
   // Model View
-  float modelViewMatrix[16];
+  GLfloat modelViewMatrix[16];
   openGLMatrix.SetMatrixMode(OpenGLMatrix::ModelView);
   openGLMatrix.LoadIdentity();
 
@@ -110,32 +117,45 @@ void displayFunc() {
   // Fill in the matrix and set
   openGLMatrix.GetMatrix(modelViewMatrix);
   pipeline.SetModelViewMatrix(modelViewMatrix);
-
+  
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   switch (renderMode) {
     case POINTS:
+      pipeline.SetFColor(frameColor);
       glDrawArrays(GL_POINTS, 0, numVertices);
       break;
     case WIRE_FRAME:
       for (size_t y = 0; y < imageHeight - 1; y++) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        pipeline.SetFColor(frameColor);
         glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
       }
       break;
     case FILL:
       for (size_t y = 0; y < imageHeight - 1; y++) {
         glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        pipeline.SetFColor(fillColor);
         glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
       }
       break;
     case BOTH:
+      // Fill
+      glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+      pipeline.SetFColor(fillColor);
       for (size_t y = 0; y < imageHeight - 1; y++) {
-        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
-        // TODO:
-        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
         glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
       }
+
+      // Wire Frame
+      pipeline.SetFColor(frameColor);
+      glEnable(GL_POLYGON_OFFSET_LINE);
+      glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+      glPolygonOffset(-1.0f, -1.0f);
+      for (size_t y = 0; y < imageHeight - 1; y++) {
+        glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
+      }
+      glPolygonOffset(0.0f, 0.0f);
+      glDisable(GL_POLYGON_OFFSET_LINE);
   }
 
 
@@ -154,6 +174,9 @@ void idleFunc() {
 
 void reshapeFunc(int w, int h) {
   glViewport(0, 0, w, h);
+  windowWidth = w;
+  windowHeight = h;
+  
   // setup perspective matrix...
   openGLMatrix.SetMatrixMode(OpenGLMatrix::Projection);
   openGLMatrix.LoadIdentity();
@@ -315,22 +338,24 @@ void initScene(int argc, char *argv[]) {
   std::cout << "numTriangles " << numTriangles << std::endl;
   std::cout << "numTriangles * 3 " << numTriangles * 3 << std::endl;
 
-  // do additional initialization here...
-  GLfloat vertices[3 * numVertices];
-  GLfloat colors[4 * numVertices];
+  std::vector<GLfloat> vertices(3 * numVertices);
+  std::vector<GLfloat> colors(4 * numVertices);
 
   for (size_t y = 0; y < imageHeight; y++) {
     for (size_t x = 0; x < imageWidth; x++) {
       unsigned int grayValue = 0;
-      for (size_t channel = 0; channel < heightmapImage->getBytesPerPixel(); channel++) {
-        //        std::cout << static_cast<unsigned int>(heightmapImage->getPixel(x, y, channel)) << " ";
-        grayValue += heightmapImage->getPixel(x, y, channel);
+      if (heightmapImage->getBytesPerPixel() == 3) {
+        for (size_t channel = 0; channel < heightmapImage->getBytesPerPixel(); channel++) {
+          //        std::cout << static_cast<unsigned int>(heightmapImage->getPixel(x, y, channel)) << " ";
+          grayValue += heightmapImage->getPixel(x, y, channel) * rgbCoefficients[channel];
+        }
+      } else {
+        grayValue = heightmapImage->getPixel(x, y, 0);
       }
-      // TODO: 3 channel??
 
       vertices[(y * imageWidth + x) * 3 + 0] = -1.0f + (x / static_cast<GLfloat> (imageWidth)) * 2.0f;
       vertices[(y * imageWidth + x) * 3 + 1] = -1.0f + (y / static_cast<GLfloat> (imageHeight)) * 2.0f;
-      vertices[(y * imageWidth + x) * 3 + 2] = grayValue / 255.0f;
+      vertices[(y * imageWidth + x) * 3 + 2] = grayValue / 255.0f / 2.0;
 
       colors[(y * imageWidth + x) * 4 + 0] = 1.0f * grayValue / 255.0f;
       colors[(y * imageWidth + x) * 4 + 1] = 1.0f * grayValue / 255.0f;
@@ -368,7 +393,7 @@ void initScene(int argc, char *argv[]) {
   // vertex vbo
   glGenBuffers(1, &vertexBufferName);
   glBindBuffer(GL_ARRAY_BUFFER, vertexBufferName);
-  glBufferData(GL_ARRAY_BUFFER, sizeof (vertices), vertices, GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof (GLfloat), &vertices[0], GL_STATIC_DRAW);
   GLuint posLocation = glGetAttribLocation(pipeline.GetProgramHandle(), "position");
   glVertexAttribPointer(posLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
   glEnableVertexAttribArray(posLocation);
@@ -376,7 +401,7 @@ void initScene(int argc, char *argv[]) {
   // color vbo
   glGenBuffers(1, &colorBufferName);
   glBindBuffer(GL_ARRAY_BUFFER, colorBufferName);
-  glBufferData(GL_ARRAY_BUFFER, sizeof (colors), colors, GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof (GLfloat), &colors[0], GL_STATIC_DRAW);
   GLuint colLocation = glGetAttribLocation(pipeline.GetProgramHandle(), "color");
   glVertexAttribPointer(colLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
   glEnableVertexAttribArray(colLocation);
@@ -388,7 +413,7 @@ void initScene(int argc, char *argv[]) {
   glBufferData(GL_ELEMENT_ARRAY_BUFFER, triangleIndices.size() * sizeof (unsigned int), &triangleIndices[0], GL_STATIC_DRAW);
 
   glEnable(GL_DEPTH_TEST);
-  glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+  glClearColor(131.0 / 255.0, 175 / 255.0, 155.0 / 255.0, 0.0);
 
 }
 
