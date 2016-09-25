@@ -30,8 +30,6 @@ char shaderBasePath[1024] = SHADER_BASE_PATH;
 char shaderBasePath[1024] = "../openGLHelper-starterCode";
 #endif
 
-using namespace std;
-
 int mousePos[2]; // x,y coordinate of the mouse position
 
 int leftMouseButton = 0; // 1 if pressed, 0 if not 
@@ -42,6 +40,11 @@ typedef enum {
   ROTATE, TRANSLATE, SCALE
 } CONTROL_STATE;
 CONTROL_STATE controlState = ROTATE;
+
+typedef enum {
+  POINTS, WIRE_FRAME, FILL, BOTH
+} RENDER_MODE;
+RENDER_MODE renderMode = POINTS;
 
 // state of the world
 std::array<float, 3> landRotate = {0.0f, 0.0f, 0.0f};
@@ -64,7 +67,7 @@ GLuint vertexBufferName;
 GLuint colorBufferName;
 GLuint numVertices = 0;
 GLuint numTriangles = 0;
-GLuint numTrianglesPerY = 0; 
+GLuint numTrianglesPerY = 0;
 // write a screenshot to the specified filename
 
 void saveScreenshot(const char * filename) {
@@ -73,9 +76,11 @@ void saveScreenshot(const char * filename) {
 
   ImageIO screenshotImg(windowWidth, windowHeight, 3, screenshotData);
 
-  if (screenshotImg.save(filename, ImageIO::FORMAT_JPEG) == ImageIO::OK)
-    cout << "File " << filename << " saved successfully." << endl;
-  else cout << "Failed to save file " << filename << '.' << endl;
+  if (screenshotImg.save(filename, ImageIO::FORMAT_JPEG) == ImageIO::OK) {
+    std::cout << "File " << filename << " saved successfully." << std::endl;
+  } else {
+    std::cout << "Failed to save file " << filename << '.' << std::endl;
+  }
 
   delete [] screenshotData;
 }
@@ -86,25 +91,54 @@ void displayFunc() {
   openGLMatrix.SetMatrixMode(OpenGLMatrix::Projection);
   openGLMatrix.GetMatrix(projectionMatrix);
   pipeline.SetProjectionMatrix(projectionMatrix);
-  
+
   // Model View
   float modelViewMatrix[16];
   openGLMatrix.SetMatrixMode(OpenGLMatrix::ModelView);
   openGLMatrix.LoadIdentity();
+
+  // Camera
   openGLMatrix.LookAt(0, 0, 2, 0, 0, 0, 0, 1, 0);
+
+  // T R S
   openGLMatrix.Translate(landTranslate[0], landTranslate[1], landTranslate[2]);
   openGLMatrix.Rotate(landRotate[0], 1, 0, 0);
   openGLMatrix.Rotate(landRotate[1], 0, 1, 0);
   openGLMatrix.Rotate(landRotate[2], 0, 0, 1);
   openGLMatrix.Scale(landScale[0], landScale[1], landScale[2]);
+
+  // Fill in the matrix and set
   openGLMatrix.GetMatrix(modelViewMatrix);
   pipeline.SetModelViewMatrix(modelViewMatrix);
 
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-  for (size_t y = 0; y < imageHeight - 1; y++) {
-    glDrawElements(GL_TRIANGLES, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *)(y * sizeof(unsigned int) * numTrianglesPerY * 3));
+  switch (renderMode) {
+    case POINTS:
+      glDrawArrays(GL_POINTS, 0, numVertices);
+      break;
+    case WIRE_FRAME:
+      for (size_t y = 0; y < imageHeight - 1; y++) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
+      }
+      break;
+    case FILL:
+      for (size_t y = 0; y < imageHeight - 1; y++) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
+      }
+      break;
+    case BOTH:
+      for (size_t y = 0; y < imageHeight - 1; y++) {
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
+        // TODO:
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+        glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
+      }
   }
+
+
 
   glutSwapBuffers();
 }
@@ -123,7 +157,7 @@ void reshapeFunc(int w, int h) {
   // setup perspective matrix...
   openGLMatrix.SetMatrixMode(OpenGLMatrix::Projection);
   openGLMatrix.LoadIdentity();
-  openGLMatrix.Perspective(90.0, 1.0 * w / h, 0.01, 10.0);
+  openGLMatrix.Perspective(90.0, 1.0 * w / h, 0.01, 1000.0);
   openGLMatrix.SetMatrixMode(OpenGLMatrix::ModelView);
 }
 
@@ -138,17 +172,17 @@ void mouseMotionDragFunc(int x, int y) {
     case TRANSLATE:
       if (leftMouseButton) {
         // control x,y translation via the left mouse button
-        landTranslate[0] += mousePosDelta[0] * 0.01f;
-        landTranslate[1] -= mousePosDelta[1] * 0.01f;
+        landTranslate[0] += mousePosDelta[0] * 0.005f;
+        landTranslate[1] -= mousePosDelta[1] * 0.005f;
       }
       if (middleMouseButton) {
         // control z translation via the middle mouse button
-        landTranslate[2] += mousePosDelta[1] * 0.01f;
+        landTranslate[2] += mousePosDelta[1] * 0.005f;
       }
       break;
 
       // rotate the landscape
-    case ROTATE:  
+    case ROTATE:
       if (leftMouseButton) {
         // control x,y rotation via the left mouse button
         landRotate[0] += mousePosDelta[1] * 0.1f;
@@ -231,8 +265,21 @@ void keyboardFunc(unsigned char key, int x, int y) {
       exit(0); // exit the program
       break;
 
+    case 'q':
+      renderMode = POINTS;
+      break;
+    case 'w':
+      renderMode = WIRE_FRAME;
+      break;
+    case 'e':
+      renderMode = FILL;
+      break;
+    case 'r':
+      renderMode = BOTH;
+      break;
+      
     case ' ':
-      cout << "You pressed the spacebar." << endl;
+      std::cout << "You pressed the spacebar." << std::endl;
       std::fill(landRotate.begin(), landRotate.end(), 0.0f);
       std::fill(landTranslate.begin(), landTranslate.end(), 0.0f);
       std::fill(landScale.begin(), landScale.end(), 1.0f);
@@ -249,10 +296,10 @@ void initScene(int argc, char *argv[]) {
   // load the image from a jpeg disk file to main memory
   heightmapImage = new ImageIO();
   if (heightmapImage->loadJPEG(argv[1]) != ImageIO::OK) {
-    cout << "Error reading image " << argv[1] << "." << endl;
+    std::cout << "Error reading image " << argv[1] << "." << std::endl;
     exit(EXIT_FAILURE);
   }
-  
+
   imageWidth = heightmapImage->getWidth();
   imageHeight = heightmapImage->getHeight();
 
@@ -263,20 +310,20 @@ void initScene(int argc, char *argv[]) {
   numVertices = imageWidth * imageHeight;
   numTrianglesPerY = (imageWidth - 1) * 2;
   numTriangles = numTrianglesPerY * (imageHeight - 1);
-  
+
   std::cout << "numVertices " << numVertices << std::endl;
   std::cout << "numTriangles " << numTriangles << std::endl;
   std::cout << "numTriangles * 3 " << numTriangles * 3 << std::endl;
-  
+
   // do additional initialization here...
   GLfloat vertices[3 * numVertices];
   GLfloat colors[4 * numVertices];
-  
+
   for (size_t y = 0; y < imageHeight; y++) {
     for (size_t x = 0; x < imageWidth; x++) {
       unsigned int grayValue = 0;
       for (size_t channel = 0; channel < heightmapImage->getBytesPerPixel(); channel++) {
-//        std::cout << static_cast<unsigned int>(heightmapImage->getPixel(x, y, channel)) << " ";
+        //        std::cout << static_cast<unsigned int>(heightmapImage->getPixel(x, y, channel)) << " ";
         grayValue += heightmapImage->getPixel(x, y, channel);
       }
       // TODO: 3 channel??
@@ -285,30 +332,30 @@ void initScene(int argc, char *argv[]) {
       vertices[(y * imageWidth + x) * 3 + 1] = -1.0f + (y / static_cast<GLfloat> (imageHeight)) * 2.0f;
       vertices[(y * imageWidth + x) * 3 + 2] = grayValue / 255.0f;
 
-      colors[(y * imageWidth + x) * 4 + 0] = 1.0f ;
-      colors[(y * imageWidth + x) * 4 + 1] = 1.0f ;
-      colors[(y * imageWidth + x) * 4 + 2] = 1.0f ;
+      colors[(y * imageWidth + x) * 4 + 0] = 1.0f * grayValue / 255.0f;
+      colors[(y * imageWidth + x) * 4 + 1] = 1.0f * grayValue / 255.0f;
+      colors[(y * imageWidth + x) * 4 + 2] = 1.0f * grayValue / 255.0f;
       colors[(y * imageWidth + x) * 4 + 3] = 0.0f;
       // std::cout << vertices[(y * imageWidth + x) * 3 + 0] << " " << vertices[(y * imageWidth + x) * 3 + 1] << " " << vertices[(y * imageWidth + x) * 3 + 2] << std::endl;
     }
   }
   
-  std::vector<unsigned int> indices;
+  std::vector<unsigned int> triangleIndices;
   for (size_t y = 0; y < imageHeight - 1; y++) {
     for (size_t x = 0; x < imageWidth - 1; x++) {
       unsigned int baseIndex = y * imageWidth + x;
-      
-      indices.push_back(baseIndex);
-      indices.push_back(baseIndex + 1);
-      indices.push_back(baseIndex + imageWidth);
-      
-      indices.push_back(baseIndex + imageWidth);
-      indices.push_back(baseIndex + 1);
-      indices.push_back(baseIndex + 1 + imageWidth);
-      
+
+      triangleIndices.push_back(baseIndex);
+      triangleIndices.push_back(baseIndex + 1);
+      triangleIndices.push_back(baseIndex + imageWidth);
+
+      triangleIndices.push_back(baseIndex + imageWidth);
+      triangleIndices.push_back(baseIndex + 1);
+      triangleIndices.push_back(baseIndex + 1 + imageWidth);
+
     }
   }
-  std::cout << "indices.size() " << indices.size() << std::endl;
+  std::cout << "triangleIndices.size() " << triangleIndices.size() << std::endl;
 
   // Create shaders
   pipeline.Init(shaderBasePath);
@@ -333,37 +380,34 @@ void initScene(int argc, char *argv[]) {
   GLuint colLocation = glGetAttribLocation(pipeline.GetProgramHandle(), "color");
   glVertexAttribPointer(colLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
   glEnableVertexAttribArray(colLocation);
-  
+
   // element vbo
   GLuint elementbuffer;
   glGenBuffers(1, &elementbuffer);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
-  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, triangleIndices.size() * sizeof (unsigned int), &triangleIndices[0], GL_STATIC_DRAW);
 
-
+  glEnable(GL_DEPTH_TEST);
   glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
 }
 
 int main(int argc, char *argv[]) {
   if (argc != 2) {
-    cout << "The arguments are incorrect." << endl;
-    cout << "usage: ./hw1 <heightmap file>" << endl;
+    std::cout << "The arguments are incorrect." << std::endl;
+    std::cout << "usage: ./hw1 <heightmap file>" << std::endl;
     exit(EXIT_FAILURE);
   }
 
-  cout << "Initializing GLUT..." << endl;
+  std::cout << "Initializing GLUT..." << std::endl;
   glutInit(&argc, argv);
   glutInitContextVersion(3, 3);
   glutInitContextFlags(GLUT_FORWARD_COMPATIBLE);
   glutInitContextProfile(GLUT_CORE_PROFILE);
 
-  glutSetOption(
-          GLUT_ACTION_ON_WINDOW_CLOSE,
-          GLUT_ACTION_GLUTMAINLOOP_RETURNS
-          );
+  glutSetOption(GLUT_ACTION_ON_WINDOW_CLOSE, GLUT_ACTION_GLUTMAINLOOP_RETURNS);
 
-  cout << "Initializing OpenGL..." << endl;
+  std::cout << "Initializing OpenGL..." << std::endl;
 
 #ifdef __APPLE__
   glutInitDisplayMode(GLUT_3_2_CORE_PROFILE | GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH | GLUT_STENCIL);
@@ -375,9 +419,9 @@ int main(int argc, char *argv[]) {
   glutInitWindowPosition(0, 0);
   glutCreateWindow(windowTitle);
 
-  cout << "OpenGL Version: " << glGetString(GL_VERSION) << endl;
-  cout << "OpenGL Renderer: " << glGetString(GL_RENDERER) << endl;
-  cout << "Shading Language Version: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << endl;
+  std::cout << "OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
+  std::cout << "OpenGL Renderer: " << glGetString(GL_RENDERER) << std::endl;
+  std::cout << "Shading Language Version: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << std::endl;
 
   // tells glut to use a particular display function to redraw 
   glutDisplayFunc(displayFunc);
@@ -402,7 +446,7 @@ int main(int argc, char *argv[]) {
   glewExperimental = GL_TRUE;
   GLint result = glewInit();
   if (result != GLEW_OK) {
-    cout << "error: " << glewGetErrorString(result) << endl;
+    std::cout << "error: " << glewGetErrorString(result) << std::endl;
     exit(EXIT_FAILURE);
   }
 #endif
