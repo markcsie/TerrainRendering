@@ -7,7 +7,8 @@
  */
 
 #include <iostream>
-#include <cstring>
+#include <vector>
+#include <array>
 #include "openGLHeader.h"
 #include "glutHeader.h"
 
@@ -43,9 +44,9 @@ typedef enum {
 CONTROL_STATE controlState = ROTATE;
 
 // state of the world
-float landRotate[3] = {0.0f, 0.0f, 0.0f};
-float landTranslate[3] = {0.0f, 0.0f, 0.0f};
-float landScale[3] = {1.0f, 1.0f, 1.0f};
+std::array<float, 3> landRotate = {0.0f, 0.0f, 0.0f};
+std::array<float, 3> landTranslate = {0.0f, 0.0f, 0.0f};
+std::array<float, 3> landScale = {1.0f, 1.0f, 1.0f};
 
 int windowWidth = 1280;
 int windowHeight = 720;
@@ -53,6 +54,17 @@ char windowTitle[512] = "CSCI 420 homework I";
 
 ImageIO * heightmapImage;
 
+size_t imageWidth = 0;
+size_t imageHeight = 0;
+
+BasicPipelineProgram pipeline;
+OpenGLMatrix openGLMatrix;
+GLuint vao;
+GLuint vertexBufferName;
+GLuint colorBufferName;
+GLuint numVertices = 0;
+GLuint numTriangles = 0;
+GLuint numTrianglesPerY = 0; 
 // write a screenshot to the specified filename
 
 void saveScreenshot(const char * filename) {
@@ -69,7 +81,32 @@ void saveScreenshot(const char * filename) {
 }
 
 void displayFunc() {
-  // render some stuff...
+  // Projection
+  float projectionMatrix[16];
+  openGLMatrix.SetMatrixMode(OpenGLMatrix::Projection);
+  openGLMatrix.GetMatrix(projectionMatrix);
+  pipeline.SetProjectionMatrix(projectionMatrix);
+  
+  // Model View
+  float modelViewMatrix[16];
+  openGLMatrix.SetMatrixMode(OpenGLMatrix::ModelView);
+  openGLMatrix.LoadIdentity();
+  openGLMatrix.LookAt(0, 0, 2, 0, 0, 0, 0, 1, 0);
+  openGLMatrix.Translate(landTranslate[0], landTranslate[1], landTranslate[2]);
+  openGLMatrix.Rotate(landRotate[0], 1, 0, 0);
+  openGLMatrix.Rotate(landRotate[1], 0, 1, 0);
+  openGLMatrix.Rotate(landRotate[2], 0, 0, 1);
+  openGLMatrix.Scale(landScale[0], landScale[1], landScale[2]);
+  openGLMatrix.GetMatrix(modelViewMatrix);
+  pipeline.SetModelViewMatrix(modelViewMatrix);
+
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+  for (size_t y = 0; y < imageHeight - 1; y++) {
+    glDrawElements(GL_TRIANGLES, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *)(y * sizeof(unsigned int) * numTrianglesPerY * 3));
+  }
+
+  glutSwapBuffers();
 }
 
 void idleFunc() {
@@ -83,8 +120,11 @@ void idleFunc() {
 
 void reshapeFunc(int w, int h) {
   glViewport(0, 0, w, h);
-
   // setup perspective matrix...
+  openGLMatrix.SetMatrixMode(OpenGLMatrix::Projection);
+  openGLMatrix.LoadIdentity();
+  openGLMatrix.Perspective(90.0, 1.0 * w / h, 0.01, 10.0);
+  openGLMatrix.SetMatrixMode(OpenGLMatrix::ModelView);
 }
 
 void mouseMotionDragFunc(int x, int y) {
@@ -108,15 +148,15 @@ void mouseMotionDragFunc(int x, int y) {
       break;
 
       // rotate the landscape
-    case ROTATE:
+    case ROTATE:  
       if (leftMouseButton) {
         // control x,y rotation via the left mouse button
-        landRotate[0] += mousePosDelta[1];
-        landRotate[1] += mousePosDelta[0];
+        landRotate[0] += mousePosDelta[1] * 0.1f;
+        landRotate[1] += mousePosDelta[0] * 0.1f;
       }
       if (middleMouseButton) {
         // control z rotation via the middle mouse button
-        landRotate[2] += mousePosDelta[1];
+        landRotate[2] += mousePosDelta[1] * 0.1f;
       }
       break;
 
@@ -193,6 +233,9 @@ void keyboardFunc(unsigned char key, int x, int y) {
 
     case ' ':
       cout << "You pressed the spacebar." << endl;
+      std::fill(landRotate.begin(), landRotate.end(), 0.0f);
+      std::fill(landTranslate.begin(), landTranslate.end(), 0.0f);
+      std::fill(landScale.begin(), landScale.end(), 1.0f);
       break;
 
     case 'x':
@@ -209,10 +252,97 @@ void initScene(int argc, char *argv[]) {
     cout << "Error reading image " << argv[1] << "." << endl;
     exit(EXIT_FAILURE);
   }
+  
+  imageWidth = heightmapImage->getWidth();
+  imageHeight = heightmapImage->getHeight();
+
+  std::cout << "Image Width: " << imageWidth << std::endl;
+  std::cout << "Image Height: " << imageHeight << std::endl;
+  std::cout << "BytesPerPixel: " << heightmapImage->getBytesPerPixel() << std::endl;
+
+  numVertices = imageWidth * imageHeight;
+  numTrianglesPerY = (imageWidth - 1) * 2;
+  numTriangles = numTrianglesPerY * (imageHeight - 1);
+  
+  std::cout << "numVertices " << numVertices << std::endl;
+  std::cout << "numTriangles " << numTriangles << std::endl;
+  std::cout << "numTriangles * 3 " << numTriangles * 3 << std::endl;
+  
+  // do additional initialization here...
+  GLfloat vertices[3 * numVertices];
+  GLfloat colors[4 * numVertices];
+  
+  for (size_t y = 0; y < imageHeight; y++) {
+    for (size_t x = 0; x < imageWidth; x++) {
+      unsigned int grayValue = 0;
+      for (size_t channel = 0; channel < heightmapImage->getBytesPerPixel(); channel++) {
+//        std::cout << static_cast<unsigned int>(heightmapImage->getPixel(x, y, channel)) << " ";
+        grayValue += heightmapImage->getPixel(x, y, channel);
+      }
+      // TODO: 3 channel??
+
+      vertices[(y * imageWidth + x) * 3 + 0] = -1.0f + (x / static_cast<GLfloat> (imageWidth)) * 2.0f;
+      vertices[(y * imageWidth + x) * 3 + 1] = -1.0f + (y / static_cast<GLfloat> (imageHeight)) * 2.0f;
+      vertices[(y * imageWidth + x) * 3 + 2] = grayValue / 255.0f;
+
+      colors[(y * imageWidth + x) * 4 + 0] = 1.0f ;
+      colors[(y * imageWidth + x) * 4 + 1] = 1.0f ;
+      colors[(y * imageWidth + x) * 4 + 2] = 1.0f ;
+      colors[(y * imageWidth + x) * 4 + 3] = 0.0f;
+      // std::cout << vertices[(y * imageWidth + x) * 3 + 0] << " " << vertices[(y * imageWidth + x) * 3 + 1] << " " << vertices[(y * imageWidth + x) * 3 + 2] << std::endl;
+    }
+  }
+  
+  std::vector<unsigned int> indices;
+  for (size_t y = 0; y < imageHeight - 1; y++) {
+    for (size_t x = 0; x < imageWidth - 1; x++) {
+      unsigned int baseIndex = y * imageWidth + x;
+      
+      indices.push_back(baseIndex);
+      indices.push_back(baseIndex + 1);
+      indices.push_back(baseIndex + imageWidth);
+      
+      indices.push_back(baseIndex + imageWidth);
+      indices.push_back(baseIndex + 1);
+      indices.push_back(baseIndex + 1 + imageWidth);
+      
+    }
+  }
+  std::cout << "indices.size() " << indices.size() << std::endl;
+
+  // Create shaders
+  pipeline.Init(shaderBasePath);
+  pipeline.Bind();
+
+  // vao
+  glGenVertexArrays(1, &vao);
+  glBindVertexArray(vao);
+
+  // vertex vbo
+  glGenBuffers(1, &vertexBufferName);
+  glBindBuffer(GL_ARRAY_BUFFER, vertexBufferName);
+  glBufferData(GL_ARRAY_BUFFER, sizeof (vertices), vertices, GL_STATIC_DRAW);
+  GLuint posLocation = glGetAttribLocation(pipeline.GetProgramHandle(), "position");
+  glVertexAttribPointer(posLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
+  glEnableVertexAttribArray(posLocation);
+
+  // color vbo
+  glGenBuffers(1, &colorBufferName);
+  glBindBuffer(GL_ARRAY_BUFFER, colorBufferName);
+  glBufferData(GL_ARRAY_BUFFER, sizeof (colors), colors, GL_STATIC_DRAW);
+  GLuint colLocation = glGetAttribLocation(pipeline.GetProgramHandle(), "color");
+  glVertexAttribPointer(colLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
+  glEnableVertexAttribArray(colLocation);
+  
+  // element vbo
+  GLuint elementbuffer;
+  glGenBuffers(1, &elementbuffer);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
+
 
   glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
-  // do additional initialization here...
 }
 
 int main(int argc, char *argv[]) {
@@ -224,13 +354,21 @@ int main(int argc, char *argv[]) {
 
   cout << "Initializing GLUT..." << endl;
   glutInit(&argc, argv);
+  glutInitContextVersion(3, 3);
+  glutInitContextFlags(GLUT_FORWARD_COMPATIBLE);
+  glutInitContextProfile(GLUT_CORE_PROFILE);
+
+  glutSetOption(
+          GLUT_ACTION_ON_WINDOW_CLOSE,
+          GLUT_ACTION_GLUTMAINLOOP_RETURNS
+          );
 
   cout << "Initializing OpenGL..." << endl;
 
 #ifdef __APPLE__
   glutInitDisplayMode(GLUT_3_2_CORE_PROFILE | GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH | GLUT_STENCIL);
 #else
-  glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH | GLUT_STENCIL);
+  glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH | GLUT_STENCIL);
 #endif
 
   glutInitWindowSize(windowWidth, windowHeight);
@@ -261,6 +399,7 @@ int main(int argc, char *argv[]) {
   // nothing is needed on Apple
 #else
   // Windows, Linux
+  glewExperimental = GL_TRUE;
   GLint result = glewInit();
   if (result != GLEW_OK) {
     cout << "error: " << glewGetErrorString(result) << endl;
