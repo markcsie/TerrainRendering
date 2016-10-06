@@ -15,7 +15,6 @@
 #include "imageIO.h"
 #include "openGLMatrix.h"
 #include "basicPipelineProgram.h"
-#include "texture.h"
 
 #ifdef WIN32
 #ifdef _DEBUG
@@ -74,7 +73,33 @@ GLuint numTrianglesPerY = 0;
 const GLfloat fillColor[4] = {1.0, 1.0, 1.0, 0.0};
 const GLfloat frameColor[4] = {1.0, 0.0, 0.0, 0.0};
 
-GLuint textureImage;
+GLuint loadTexture(const char * imagePath) {
+
+  printf("Reading image %s\n", imagePath);
+  
+  ImageIO imageIO;
+  if (imageIO.loadJPEG(imagePath) != ImageIO::OK) {
+      std::cerr << "Error reading image " << imagePath << std::endl;
+      exit(EXIT_FAILURE);
+  }
+  
+  // Create OpenGL texture
+  GLuint textureID;
+  glGenTextures(1, &textureID);
+
+  glBindTexture(GL_TEXTURE_2D, textureID);
+
+  // Send the image to OpenGL
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, imageIO.getWidth(), imageIO.getHeight(), 0, GL_RGB, GL_UNSIGNED_BYTE, imageIO.getPixels());
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+  glGenerateMipmap(GL_TEXTURE_2D);
+  
+  return textureID;
+}
 
 // write a screenshot to the specified filename
 void saveScreenshot(const char * filename) {
@@ -408,7 +433,7 @@ void initScene(int argc, char *argv[]) {
   pipeline.Init(shaderBasePath);
   pipeline.Bind();
   
-  textureImage = loadBMP_custom("./grass.bmp");
+  GLuint textureImage = loadTexture("./grass.jpg");
 
   // vao
   glGenVertexArrays(1, &vao);
