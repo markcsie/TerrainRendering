@@ -14,10 +14,9 @@
 
   This class is implemented using the OpenGL Mathematics (glm) library:
   http://glm.g-truc.net/0.9.7/index.html
-*/
+ */
 
-class OpenGLMatrix 
-{
+class OpenGLMatrix {
 public:
   OpenGLMatrix();
 
@@ -27,9 +26,9 @@ public:
   void Scale(float x, float y, float z);
 
   // set the camera position, aim and orientation (use in ModelView mode)
-  void LookAt(float eyeX, float eyeY, float eyeZ, 
-              float centerX, float centerY, float centerZ, 
-              float upX, float upY, float upZ);
+  void LookAt(float eyeX, float eyeY, float eyeZ,
+          float centerX, float centerY, float centerZ,
+          float upX, float upY, float upZ);
 
   // set the projection (use in Projection mode)
   void Ortho(float left, float right, float bottom, float top, float zNear, float zFar);
@@ -37,7 +36,10 @@ public:
   void Perspective(float fovY, float aspect, float zNear, float zFar); // angle is in degrees
 
   // matrix manipulation
-  enum MatrixMode { ModelView = 0, Projection = 1, NumMatrixModes };
+
+  enum MatrixMode {
+    ModelView = 0, Projection = 1, NumMatrixModes
+  };
   void SetMatrixMode(MatrixMode matrixMode); // either ModelView or Projection
   void LoadIdentity(); // set the current matrix to identity
   void LoadMatrix(const float m[16]); // set the current matrix to "m"
@@ -46,7 +48,7 @@ public:
   void GetNormalMatrix(float * matrix); // get the current matrix for transformations of normals
 
   // compute the combined projection-modelview matrix, by multiplying the current Projection and Modelview matrices
-  void GetProjectionModelViewMatrix(float * matrix); 
+  void GetProjectionModelViewMatrix(float * matrix);
 
   // the matrix stack
   // there are two separate stacks, one for ModelView and one for Projection mode

@@ -9,7 +9,7 @@
 
   Shader program helper class. 
   It loads shaders and properly initializes them in OpenGL.
-*/
+ */
 
 /* This class stores a set of shaders that serve as the stages of the rendering pipeline. 
    The stages are:
@@ -26,10 +26,9 @@
    (A), (D), (E), (C), (B)
   
    The shaders are provided either by loading them from a file, or from a C string.
-*/
+ */
 
-class PipelineProgram
-{
+class PipelineProgram {
 public:
   PipelineProgram();
   virtual ~PipelineProgram();
@@ -45,28 +44,31 @@ public:
   // load shaders from a text file
   // all shaders must reside in the same folder, denoted by "filenameBasePath"
   int BuildShadersFromFiles(const char * filenameBasePath,
-                            const char * vertexShaderFilename,
-                            const char * fragmentShaderFilename,
-                            const char * geometryShaderFilename = NULL,
-                            const char * tessellationControlShaderFilename = NULL,
-                            const char * tessellationEvaluationShaderFilename = NULL);
+          const char * vertexShaderFilename,
+          const char * fragmentShaderFilename,
+          const char * geometryShaderFilename = NULL,
+          const char * tessellationControlShaderFilename = NULL,
+          const char * tessellationEvaluationShaderFilename = NULL);
   // load shaders from a C text string
   int BuildShadersFromStrings(const char * vertexShaderCode,
-                              const char * fragmentShaderCode,
-                              const char * geometryShaderCode = NULL,
-                              const char * tessellationControlShaderCode = NULL,
-                              const char * tessellationEvaluationShaderCode = NULL);
+          const char * fragmentShaderCode,
+          const char * geometryShaderCode = NULL,
+          const char * tessellationControlShaderCode = NULL,
+          const char * tessellationEvaluationShaderCode = NULL);
 
   // binds (activates) all the provided shaders 
   void Bind();
   // get program handle
-  GLuint GetProgramHandle() { return programHandle; }
+
+  GLuint GetProgramHandle() {
+    return programHandle;
+  }
 
 protected:
   GLuint programHandle; // the handle to the pipeline program
 
   // load shader from a file into a string
-  int LoadShader(const char * filename, char * code, int len); 
+  int LoadShader(const char * filename, char * code, int len);
 
   // compile a shader
   // input:
@@ -84,6 +86,5 @@ protected:
 
 #define SET_SHADER_VARIABLE_HANDLE(shaderVariableName)\
     h_##shaderVariableName = GetShaderVariableHandle(#shaderVariableName)
-
 #endif
 

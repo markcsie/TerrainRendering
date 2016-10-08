@@ -1,51 +1,37 @@
-﻿#include <iostream>
-#include <cstring>
+#include <iostream>
 #include "openGLHeader.h"
 #include "basicPipelineProgram.h"
-using namespace std;
 
-int BasicPipelineProgram::Init(const char * shaderBasePath) 
-{
-  if (BuildShadersFromFiles(shaderBasePath, "basic.vertexShader.glsl", "basic.fragmentShader.glsl") != 0)
-  {
-    cout << "Failed to build the pipeline program." << endl;
+int BasicPipelineProgram::Init(const char * shaderBasePath) {
+  if (BuildShadersFromFiles(shaderBasePath, "basic.vertexShader.glsl", "basic.fragmentShader.glsl") != 0) {
+    std::cout << "Failed to build the pipeline program." << std::endl;
     return 1;
   }
-
-  cout << "Successfully built the pipeline program." << endl;
+  std::cout << "Successfully built the pipeline program." << std::endl;
   return 0;
 }
 
-void BasicPipelineProgram::SetModelViewMatrix(const GLfloat * m) 
-{
-  // pass "m" to the pipeline program, as the modelview matrix
+void BasicPipelineProgram::SetModelViewMatrix(const GLfloat * m) {
+  // Pass "m" to the pipeline program, as the modelview matrix
   glUniformMatrix4fv(h_modelViewMatrix, 1, GL_FALSE, m);
 }
 
-void BasicPipelineProgram::SetProjectionMatrix(const GLfloat * m) 
-{
-  // pass "m" to the pipeline program, as the projection matrix
+void BasicPipelineProgram::SetProjectionMatrix(const GLfloat * m) {
+  // Pass "m" to the pipeline program, as the projection matrix
   glUniformMatrix4fv(h_projectionMatrix, 1, GL_FALSE, m);
 }
 
-void BasicPipelineProgram::SetFColor(const GLfloat * color) 
-{
+void BasicPipelineProgram::SetFColor(const GLfloat * color) {
+  // Pass "color" to the pipeline program
   glUniform4fv(h_fCol, 1, color);
 }
 
-void BasicPipelineProgram::SetTextureSampler() 
-{
-  glUniform1i(h_textureSampler, 0);
-}
-
-int BasicPipelineProgram::SetShaderVariableHandles() 
-{
+int BasicPipelineProgram::SetShaderVariableHandles() {
   // set h_modelViewMatrix and h_projectionMatrix
   SET_SHADER_VARIABLE_HANDLE(modelViewMatrix);
   SET_SHADER_VARIABLE_HANDLE(projectionMatrix);
-  
+
   SET_SHADER_VARIABLE_HANDLE(fCol);
-//  SET_SHADER_VARIABLE_HANDLE(textureSampler);
   return 0;
 }
 

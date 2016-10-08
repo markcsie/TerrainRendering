@@ -51,42 +51,37 @@ std::array<GLfloat, 3> landRotate = {0.0f, 0.0f, 0.0f};
 std::array<GLfloat, 3> landTranslate = {0.0f, 0.0f, 0.0f};
 std::array<GLfloat, 3> landScale = {1.0f, 1.0f, 1.0f};
 
-const std::array<GLfloat, 3> rgbCoefficients = {0.299f, 0.587f, 0.114f};
-
-int windowWidth = 1280;
-int windowHeight = 720;
+const int windowWidth = 1280;
+const int windowHeight = 720;
 char windowTitle[512] = "CSCI 420 homework I";
 
-ImageIO * heightmapImage;
-
-size_t imageWidth = 0;
-size_t imageHeight = 0;
+GLuint imageWidth = 0;
+GLuint imageHeight = 0;
 
 BasicPipelineProgram pipeline;
 OpenGLMatrix openGLMatrix;
-GLuint vao;
-GLuint vertexBufferName;
-GLuint colorBufferName;
 GLuint numVertices = 0;
 GLuint numTriangles = 0;
 GLuint numTrianglesPerY = 0;
+
 const GLfloat fillColor[4] = {1.0, 1.0, 1.0, 0.0};
 const GLfloat frameColor[4] = {1.0, 0.0, 0.0, 0.0};
+
+GLuint screenShotCount = 0;
 
 GLuint loadTexture(const char * imagePath) {
 
   printf("Reading image %s\n", imagePath);
-  
+
   ImageIO imageIO;
   if (imageIO.loadJPEG(imagePath) != ImageIO::OK) {
-      std::cerr << "Error reading image " << imagePath << std::endl;
-      exit(EXIT_FAILURE);
+    std::cerr << "Error reading image " << imagePath << std::endl;
+    exit(EXIT_FAILURE);
   }
-  
+
   // Create OpenGL texture
   GLuint textureID;
   glGenTextures(1, &textureID);
-
   glBindTexture(GL_TEXTURE_2D, textureID);
 
   // Send the image to OpenGL
@@ -96,20 +91,17 @@ GLuint loadTexture(const char * imagePath) {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-  glGenerateMipmap(GL_TEXTURE_2D);
-  
+  glGenerateMipmap(GL_TEXTURE_2D); // generate mipmaps for anti-aliasing
+
   return textureID;
 }
 
 // write a screenshot to the specified filename
+
 void saveScreenshot(const char * filename) {
   unsigned char * screenshotData = new unsigned char[windowWidth * windowHeight * 3];
-  std::cout << "wtfffff " << std::endl;
   glReadPixels(0, 0, windowWidth, windowHeight, GL_RGB, GL_UNSIGNED_BYTE, screenshotData);
-  std::cout << "wtfffff " << std::endl;
-
   ImageIO screenshotImg(windowWidth, windowHeight, 3, screenshotData);
-  std::cout << "wtfffff " << std::endl;
 
   if (screenshotImg.save(filename, ImageIO::FORMAT_JPEG) == ImageIO::OK) {
     std::cout << "File " << filename << " saved successfully." << std::endl;
@@ -121,18 +113,16 @@ void saveScreenshot(const char * filename) {
 }
 
 void displayFunc() {
-  // Projection
+  // Set projection matrix for shaders
   GLfloat projectionMatrix[16];
   openGLMatrix.SetMatrixMode(OpenGLMatrix::Projection);
   openGLMatrix.GetMatrix(projectionMatrix);
   pipeline.SetProjectionMatrix(projectionMatrix);
 
-  // Model View
+  // Set model view matrix for shaders
   GLfloat modelViewMatrix[16];
   openGLMatrix.SetMatrixMode(OpenGLMatrix::ModelView);
   openGLMatrix.LoadIdentity();
-
-  // Camera
   openGLMatrix.LookAt(0, 0, 2, 0, 0, 0, 0, 1, 0);
 
   // T R S
@@ -141,11 +131,10 @@ void displayFunc() {
   openGLMatrix.Rotate(landRotate[1], 0, 1, 0);
   openGLMatrix.Rotate(landRotate[2], 0, 0, 1);
   openGLMatrix.Scale(landScale[0], landScale[1], landScale[2]);
-
-  // Fill in the matrix and set
   openGLMatrix.GetMatrix(modelViewMatrix);
   pipeline.SetModelViewMatrix(modelViewMatrix);
-  
+
+  // Clear the scene
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
   switch (renderMode) {
     case POINTS:
@@ -154,19 +143,19 @@ void displayFunc() {
       break;
     case WIRE_FRAME:
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-      pipeline.SetFColor(frameColor);
-      for (size_t y = 0; y < imageHeight - 1; y++) { 
+      pipeline.SetFColor(frameColor); // different colors for wireframe and fill
+      for (size_t y = 0; y < imageHeight - 1; y++) { // Draw elements line by line because GL_TRIANGLE_STRIP
         glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
       }
       break;
     case FILL:
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-      pipeline.SetFColor(fillColor);
-      for (size_t y = 0; y < imageHeight - 1; y++) {
+      pipeline.SetFColor(fillColor); // different colors for wireframe and fill
+      for (size_t y = 0; y < imageHeight - 1; y++) { // Draw elements line by line because GL_TRIANGLE_STRIP
         glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
       }
       break;
-    case BOTH:
+    case BOTH: // Draw wireframe and triangles
       // Fill
       glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
       pipeline.SetFColor(fillColor);
@@ -178,24 +167,22 @@ void displayFunc() {
       pipeline.SetFColor(frameColor);
       glEnable(GL_POLYGON_OFFSET_LINE);
       glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-      glPolygonOffset(-1.0f, -1.0f);
+      glPolygonOffset(-1.0f, -1.0f); // Avoid z-buffer fighting
       for (size_t y = 0; y < imageHeight - 1; y++) {
         glDrawElements(GL_TRIANGLE_STRIP, numTrianglesPerY * 3, GL_UNSIGNED_INT, (const GLvoid *) (y * sizeof (unsigned int) * numTrianglesPerY * 3));
       }
       glPolygonOffset(0.0f, 0.0f);
       glDisable(GL_POLYGON_OFFSET_LINE);
   }
-
-
-
-  glutSwapBuffers();
+  glutSwapBuffers(); // Swap buffers for double buffering
 }
 
 void idleFunc() {
-  // do some stuff... 
-
-  // for example, here, you can save the screenshots to disk (to make the animation)
-//  saveScreenshot("screenshot.jpg");
+  // Uncomment the following to enable saving animation images, 
+  char screenName[25];
+  sprintf(screenName, "%03d", screenShotCount);
+  saveScreenshot(("animation/" + std::string(screenName) + ".jpg").c_str());
+  screenShotCount++;
 
   // make the screen update 
   glutPostRedisplay();
@@ -203,10 +190,8 @@ void idleFunc() {
 
 void reshapeFunc(int w, int h) {
   glViewport(0, 0, w, h);
-  windowWidth = w;
-  windowHeight = h;
-  
-  // setup perspective matrix...
+
+  // Setup perspective matrix
   openGLMatrix.SetMatrixMode(OpenGLMatrix::Projection);
   openGLMatrix.LoadIdentity();
   openGLMatrix.Perspective(90.0, 1.0 * w / h, 0.01, 1000.0);
@@ -224,12 +209,12 @@ void mouseMotionDragFunc(int x, int y) {
     case TRANSLATE:
       if (leftMouseButton) {
         // control x,y translation via the left mouse button
-        landTranslate[0] += mousePosDelta[0] * 0.005f;
-        landTranslate[1] -= mousePosDelta[1] * 0.005f;
+        landTranslate[0] += mousePosDelta[0] * 0.003f;
+        landTranslate[1] -= mousePosDelta[1] * 0.003f;
       }
       if (middleMouseButton) {
         // control z translation via the middle mouse button
-        landTranslate[2] += mousePosDelta[1] * 0.005f;
+        landTranslate[2] += mousePosDelta[1] * 0.003f;
       }
       break;
 
@@ -266,16 +251,15 @@ void mouseMotionDragFunc(int x, int y) {
 }
 
 void mouseMotionFunc(int x, int y) {
-  // mouse has moved
-  // store the new mouse position
+  // Store the new mouse position
   mousePos[0] = x;
   mousePos[1] = y;
 }
 
 void mouseButtonFunc(int button, int state, int x, int y) {
-  // a mouse button has has been pressed or depressed
+  // Set flags when a mouse button has been pressed or depressed
 
-  // keep track of the mouse button state, in leftMouseButton, middleMouseButton, rightMouseButton variables
+  // Keep track of the mouse button state, in leftMouseButton, middleMouseButton, rightMouseButton variables
   switch (button) {
     case GLUT_LEFT_BUTTON:
       leftMouseButton = (state == GLUT_DOWN);
@@ -300,13 +284,13 @@ void mouseButtonFunc(int button, int state, int x, int y) {
       controlState = SCALE;
       break;
 
-      // if CTRL and SHIFT are not pressed, we are in rotate mode
+      // If CTRL and SHIFT are not pressed, we are in rotate mode
     default:
       controlState = ROTATE;
       break;
   }
 
-  // store the new mouse position
+  // Store the new mouse position
   mousePos[0] = x;
   mousePos[1] = y;
 }
@@ -329,8 +313,9 @@ void keyboardFunc(unsigned char key, int x, int y) {
     case 'r':
       renderMode = BOTH;
       break;
-      
+
     case ' ':
+      // Reset
       std::cout << "You pressed the spacebar." << std::endl;
       std::fill(landRotate.begin(), landRotate.end(), 0.0f);
       std::fill(landTranslate.begin(), landTranslate.end(), 0.0f);
@@ -338,55 +323,60 @@ void keyboardFunc(unsigned char key, int x, int y) {
       break;
 
     case 'x':
-      // take a screenshot
+      // Take a screenshot
       saveScreenshot("screenshot.jpg");
       break;
   }
 }
 
 void initScene(int argc, char *argv[]) {
-  // load the image from a jpeg disk file to main memory
-  heightmapImage = new ImageIO();
-  if (heightmapImage->loadJPEG(argv[1]) != ImageIO::OK) {
+  // Load the height image
+  ImageIO heightmapImage;
+  if (heightmapImage.loadJPEG(argv[1]) != ImageIO::OK) {
     std::cout << "Error reading image " << argv[1] << "." << std::endl;
     exit(EXIT_FAILURE);
   }
 
-  imageWidth = heightmapImage->getWidth();
-  imageHeight = heightmapImage->getHeight();
+  imageWidth = heightmapImage.getWidth();
+  imageHeight = heightmapImage.getHeight();
 
   std::cout << "Image Width: " << imageWidth << std::endl;
   std::cout << "Image Height: " << imageHeight << std::endl;
-  std::cout << "BytesPerPixel: " << heightmapImage->getBytesPerPixel() << std::endl;
+  std::cout << "BytesPerPixel: " << heightmapImage.getBytesPerPixel() << std::endl;
 
+  // Calculate the number of vertices and triangles for later use
   numVertices = imageWidth * imageHeight;
   numTrianglesPerY = (imageWidth - 1) * 2;
   numTriangles = numTrianglesPerY * (imageHeight - 1);
 
   std::cout << "numVertices " << numVertices << std::endl;
   std::cout << "numTriangles " << numTriangles << std::endl;
-  std::cout << "numTriangles * 3 " << numTriangles * 3 << std::endl;
 
+  // Buffer for vertices, colors and uv coordinates for texture
   std::vector<GLfloat> vertices(3 * numVertices);
   std::vector<GLfloat> colors(4 * numVertices);
   std::vector<GLfloat> uvData;
 
+  const std::array<GLfloat, 3> rgbCoefficients = {0.299f, 0.587f, 0.114f};
+  // Extract pixels from hieght image
   for (size_t y = 0; y < imageHeight; y++) {
     for (size_t x = 0; x < imageWidth; x++) {
+      // Convert pixel values to grayscale 
       unsigned int grayValue = 0;
-      if (heightmapImage->getBytesPerPixel() == 3) {
-        for (size_t channel = 0; channel < heightmapImage->getBytesPerPixel(); channel++) {
-          //        std::cout << static_cast<unsigned int>(heightmapImage->getPixel(x, y, channel)) << " ";
-          grayValue += heightmapImage->getPixel(x, y, channel) * rgbCoefficients[channel];
+      if (heightmapImage.getBytesPerPixel() == 3) {
+        for (size_t channel = 0; channel < heightmapImage.getBytesPerPixel(); channel++) {
+          grayValue += heightmapImage.getPixel(x, y, channel) * rgbCoefficients[channel];
         }
       } else {
-        grayValue = heightmapImage->getPixel(x, y, 0);
+        grayValue = heightmapImage.getPixel(x, y, 0);
       }
 
+      // Assign vertices according to grayscale values
       vertices[(y * imageWidth + x) * 3 + 0] = -1.0f + (x / static_cast<GLfloat> (imageWidth)) * 2.0f;
       vertices[(y * imageWidth + x) * 3 + 1] = -1.0f + (y / static_cast<GLfloat> (imageHeight)) * 2.0f;
-      vertices[(y * imageWidth + x) * 3 + 2] = grayValue / 255.0f / 2.0;
+      vertices[(y * imageWidth + x) * 3 + 2] = grayValue / 255.0f / 3.0;
 
+      // Assign u, v coordinates on texture map
       if (y % 2 == 0) {
         if (x % 2 == 0) {
           uvData.push_back(0.0);
@@ -405,14 +395,15 @@ void initScene(int argc, char *argv[]) {
         }
       }
 
+      // Grayscale values, the higher the value the brighter the color
       colors[(y * imageWidth + x) * 4 + 0] = 1.0f * grayValue / 255.0f;
       colors[(y * imageWidth + x) * 4 + 1] = 1.0f * grayValue / 255.0f;
       colors[(y * imageWidth + x) * 4 + 2] = 1.0f * grayValue / 255.0f;
       colors[(y * imageWidth + x) * 4 + 3] = 0.0f;
-      // std::cout << vertices[(y * imageWidth + x) * 3 + 0] << " " << vertices[(y * imageWidth + x) * 3 + 1] << " " << vertices[(y * imageWidth + x) * 3 + 2] << std::endl;
     }
   }
-  
+
+  // Indices buffer for glDrawElements
   std::vector<unsigned int> triangleIndices;
   for (size_t y = 0; y < imageHeight - 1; y++) {
     for (size_t x = 0; x < imageWidth - 1; x++) {
@@ -421,25 +412,27 @@ void initScene(int argc, char *argv[]) {
       triangleIndices.push_back(baseIndex);
       triangleIndices.push_back(baseIndex + 1);
       triangleIndices.push_back(baseIndex + imageWidth);
-      
+
       triangleIndices.push_back(baseIndex + imageWidth);
       triangleIndices.push_back(baseIndex + 1);
-      triangleIndices.push_back(baseIndex + 1 + imageWidth);      
+      triangleIndices.push_back(baseIndex + 1 + imageWidth);
     }
   }
-  std::cout << "triangleIndices.size() " << triangleIndices.size() << std::endl;
 
   // Create shaders
   pipeline.Init(shaderBasePath);
   pipeline.Bind();
-  
+
+  // Load texture image and create texture
   GLuint textureImage = loadTexture("./grass.jpg");
 
-  // vao
+  // Generate and bind Vertex Array Object
+  GLuint vao;
   glGenVertexArrays(1, &vao);
   glBindVertexArray(vao);
 
-  // vertex vbo
+  // Generate, bind and send vertex Vertex Buffer Object to shaders
+  GLuint vertexBufferName;
   glGenBuffers(1, &vertexBufferName);
   glBindBuffer(GL_ARRAY_BUFFER, vertexBufferName);
   glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof (GLfloat), &vertices[0], GL_STATIC_DRAW);
@@ -447,7 +440,8 @@ void initScene(int argc, char *argv[]) {
   glVertexAttribPointer(posLocation, 3, GL_FLOAT, GL_FALSE, 0, 0);
   glEnableVertexAttribArray(posLocation);
 
-  // color vbo
+  // Generate, bind and send color Vertex Buffer Object to shaders
+  GLuint colorBufferName;
   glGenBuffers(1, &colorBufferName);
   glBindBuffer(GL_ARRAY_BUFFER, colorBufferName);
   glBufferData(GL_ARRAY_BUFFER, colors.size() * sizeof (GLfloat), &colors[0], GL_STATIC_DRAW);
@@ -455,7 +449,7 @@ void initScene(int argc, char *argv[]) {
   glVertexAttribPointer(colLocation, 4, GL_FLOAT, GL_FALSE, 0, 0);
   glEnableVertexAttribArray(colLocation);
 
-  // element vbo
+  // Generate and bind elements Vertex Buffer Object
   GLuint elementbuffer;
   glGenBuffers(1, &elementbuffer);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
@@ -464,9 +458,8 @@ void initScene(int argc, char *argv[]) {
   // Bind our texture in Texture Unit 0
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, textureImage);
-  pipeline.SetTextureSampler();
-  
-  // uv vbo, for texture
+
+  // Generate, bind and send uv Vertex Buffer Object to shaders for texture mapping
   GLuint uvbuffer;
   glGenBuffers(1, &uvbuffer);
   glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
@@ -475,9 +468,11 @@ void initScene(int argc, char *argv[]) {
   glVertexAttribPointer(uvLocation, 2, GL_FLOAT, GL_FALSE, 0, 0);
   glEnableVertexAttribArray(uvLocation);
 
+  // Enable depth testing so that the hidden scene will not be drawn.
   glEnable(GL_DEPTH_TEST);
-  glClearColor(131.0 / 255.0, 175 / 255.0, 155.0 / 255.0, 0.0);
 
+  // Background color
+  glClearColor(131.0 / 255.0, 175 / 255.0, 155.0 / 255.0, 0.0);
 }
 
 int main(int argc, char *argv[]) {
@@ -489,6 +484,7 @@ int main(int argc, char *argv[]) {
 
   std::cout << "Initializing GLUT..." << std::endl;
   glutInit(&argc, argv);
+  // Use core profile
   glutInitContextVersion(3, 3);
   glutInitContextFlags(GLUT_FORWARD_COMPATIBLE);
   glutInitContextProfile(GLUT_CORE_PROFILE);
@@ -531,6 +527,7 @@ int main(int argc, char *argv[]) {
   // nothing is needed on Apple
 #else
   // Windows, Linux
+  // TO ensure that all extensions with valid entry points will be exposed.
   glewExperimental = GL_TRUE;
   GLint result = glewInit();
   if (result != GLEW_OK) {
