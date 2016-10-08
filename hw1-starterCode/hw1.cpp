@@ -179,10 +179,10 @@ void displayFunc() {
 
 void idleFunc() {
   // Uncomment the following to enable saving animation images, 
-  char screenName[25];
-  sprintf(screenName, "%03d", screenShotCount);
-  saveScreenshot(("animation/" + std::string(screenName) + ".jpg").c_str());
-  screenShotCount++;
+//  char screenName[25];
+//  sprintf(screenName, "%03d", screenShotCount);
+//  saveScreenshot(("animation/" + std::string(screenName) + ".jpg").c_str());
+//  screenShotCount++;
 
   // make the screen update 
   glutPostRedisplay();
